@@ -41,7 +41,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const rtcConfig = {
     iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
+      {
+        urls: [
+          'stun:stun.l.google.com:19302',
+          'stun:global.stun.twilio.com:3478'
+        ]
+      },
       {
         urls: [
           'turn:openrelay.metered.ca:80',
@@ -51,9 +56,18 @@ document.addEventListener('DOMContentLoaded', () => {
         ],
         username: 'openrelayproject',
         credential: 'openrelayproject'
+      },
+      {
+        urls: [
+          'turn:relay1.expressturn.com:3478',
+          'turn:relay1.expressturn.com:3479',
+          'turn:relay1.expressturn.com:80',
+          'turn:relay1.expressturn.com:443'
+        ],
+        username: 'efYJx3AgkF2EtAmfY9',
+        credential: 'xJXWsaEhuangxZr4'
       }
     ],
-    iceTransportPolicy: 'relay',
     sdpSemantics: 'unified-plan'
   };
 
