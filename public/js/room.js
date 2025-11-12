@@ -39,42 +39,70 @@ document.addEventListener('DOMContentLoaded', () => {
   let analyserTimer = null;
   let lastSpeaking = false;
 
-  const rtcConfig = {
-    iceServers: [
-      {
-        urls: [
-          'stun:stun.l.google.com:19302',
-          'stun:global.stun.twilio.com:3478'
-        ]
-      },
-      {
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turn:openrelay.metered.ca:80?transport=tcp',
-          'turns:openrelay.metered.ca:443'
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: [
-          'stun:stun.relay.metered.ca:80'
-        ]
-      },
-      {
-        urls: [
-          'turn:standard.relay.metered.ca:80',
-          'turn:standard.relay.metered.ca:80?transport=tcp',
-          'turn:standard.relay.metered.ca:443',
-          'turns:standard.relay.metered.ca:443?transport=tcp'
-        ],
-        username: '24b3949463d1731b53488dd4',
-        credential: 'Cu9IWzciaN3Mo6Pe'
-      }
-    ],
+  const DEFAULT_ICE_SERVERS = [
+    {
+      urls: [
+        'stun:stun.l.google.com:19302',
+        'stun:global.stun.twilio.com:3478'
+      ]
+    },
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:80?transport=tcp',
+        'turns:openrelay.metered.ca:443'
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: [
+        'stun:stun.relay.metered.ca:80'
+      ]
+    },
+    {
+      urls: [
+        'turn:standard.relay.metered.ca:80',
+        'turn:standard.relay.metered.ca:80?transport=tcp',
+        'turn:standard.relay.metered.ca:443',
+        'turns:standard.relay.metered.ca:443?transport=tcp'
+      ],
+      username: '24b3949463d1731b53488dd4',
+      credential: 'Cu9IWzciaN3Mo6Pe'
+    }
+  ];
+
+  let rtcConfig = {
+    iceServers: DEFAULT_ICE_SERVERS,
     sdpSemantics: 'unified-plan'
   };
+
+  hydrateIceServers();
+
+  async function hydrateIceServers() {
+    try {
+      const response = await fetch('https://mffckrmassanger.metered.live/api/v1/turn/credentials?apiKey=638bda1a3ada29228e5873d5834c471bc32b');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const iceServers = await response.json();
+      if (!Array.isArray(iceServers) || !iceServers.length) {
+        throw new Error('Empty TURN config response');
+      }
+      rtcConfig = {
+        ...rtcConfig,
+        iceServers
+      };
+      console.info('Loaded TURN credentials from Metered API');
+    } catch (error) {
+      console.warn('Failed to load TURN credentials, using bundled fallback.', error);
+      rtcConfig = {
+        ...rtcConfig,
+        iceServers: DEFAULT_ICE_SERVERS
+      };
+    }
+  }
 
   const escapeHtml = (value = '') =>
     value.replace(/[&<>"']/g, (char) => ({
