@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MFFCKRmassanger — Приватные комнаты</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="start-screen">
+  <main class="card start-card">
+    <header class="card-header">
+      <p class="eyebrow">MFFCKRmassanger</p>
+      <h1>Закрытые комнаты для ваших созвонов</h1>
+      <p class="subtitle">
+        Создайте уникальный код, поделитесь им с друзьями и общайтесь текстом и голосом.
+        Приложение готово к бесплатным тарифам Render / Fly / Replit.
+      </p>
+    </header>
+
+    <form id="startForm" class="form-grid" novalidate>
+      <label class="input-block">
+        <span>Ваше имя</span>
+        <input type="text" id="nameInput" placeholder="Например, Alex" maxlength="32" autocomplete="name">
+      </label>
+
+      <label class="input-block">
+        <span>Код комнаты</span>
+        <input type="text" id="roomCodeInput" placeholder="ABC123" maxlength="6" autocapitalize="characters">
+      </label>
+
+      <p id="startError" class="form-error" role="alert"></p>
+
+      <div class="button-row">
+        <button type="button" id="createRoomBtn" class="btn primary">Создать комнату</button>
+        <button type="submit" id="joinRoomBtn" class="btn ghost" disabled>Присоединиться</button>
+      </div>
+    </form>
+
+    <p class="helper-text">
+      Комнаты живут, пока работает сервер. Если он «уснул» на бесплатном хостинге, просто создайте новый код.
+    </p>
+  </main>
+
+  <footer class="start-footer">
+    Голосовые соединения работают по WebRTC напрямую между браузерами, сервер нужен только для сигналинга.
+  </footer>
+
+  <script type="module" src="js/lobby.js"></script>
+</body>
+</html>

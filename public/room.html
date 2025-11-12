@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Комната — MFFCKRmassanger</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="room-screen">
+  <div class="room-shell">
+    <header class="room-header">
+      <div class="room-title">
+        <button id="backToStart" class="icon-btn" title="На старт">←</button>
+        <div>
+          <p class="eyebrow">Комната</p>
+          <h1 id="roomCodeLabel">------</h1>
+        </div>
+      </div>
+      <button id="leaveRoomBtn" class="btn danger">Покинуть комнату</button>
+    </header>
+
+    <section class="room-body">
+      <aside class="participants-panel">
+        <div class="panel-heading">
+          <h2>Участники</h2>
+          <span id="participantCount" class="pill">0</span>
+        </div>
+        <ul id="participantList"></ul>
+      </aside>
+
+      <section class="chat-panel">
+        <div id="messageFeed" class="message-feed"></div>
+        <form id="messageForm" class="message-form" autocomplete="off">
+          <input type="text" id="messageInput" placeholder="Напишите сообщение..." maxlength="400">
+          <button type="submit" class="btn primary">Отправить</button>
+        </form>
+      </section>
+    </section>
+
+    <section class="voice-panel">
+      <div>
+        <h2>Голосовой чат</h2>
+        <p id="voiceHint">Вы еще не подключались к голосу.</p>
+      </div>
+      <div class="voice-actions">
+        <button id="toggleVoiceBtn" class="btn secondary" disabled>Войти в голос</button>
+        <div class="voice-status" id="voiceStatus">Микрофон выключен</div>
+      </div>
+    </section>
+  </div>
+
+  <div id="audioContainer" class="sr-only" aria-hidden="true"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="js/room.js"></script>
+</body>
+</html>
