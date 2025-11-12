@@ -64,8 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {
           'turn:relay1.expressturn.com:80',
           'turn:relay1.expressturn.com:443'
         ],
-        username: 'efYJx3AgkF2EtAmfY9',
-        credential: 'xJXWsaEhuangxZr4'
+        username: '000000002078331153',
+        credential: 'MfD3FnngQ3ie3ZLKnNHE+2F86HU='
       }
     ],
     sdpSemantics: 'unified-plan'
