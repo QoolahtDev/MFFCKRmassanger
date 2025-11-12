@@ -59,13 +59,18 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       {
         urls: [
-          'turn:relay1.expressturn.com:3478',
-          'turn:relay1.expressturn.com:3479',
-          'turn:relay1.expressturn.com:80',
-          'turn:relay1.expressturn.com:443'
+          'stun:stun.relay.metered.ca:80'
+        ]
+      },
+      {
+        urls: [
+          'turn:standard.relay.metered.ca:80',
+          'turn:standard.relay.metered.ca:80?transport=tcp',
+          'turn:standard.relay.metered.ca:443',
+          'turns:standard.relay.metered.ca:443?transport=tcp'
         ],
-        username: '000000002078331153',
-        credential: 'MfD3FnngQ3ie3ZLKnNHE+2F86HU='
+        username: '24b3949463d1731b53488dd4',
+        credential: 'Cu9IWzciaN3Mo6Pe'
       }
     ],
     sdpSemantics: 'unified-plan'
