@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let mySocketId = null;
   let joinConfirmed = false;
   let voiceEnabled = false;
+  let voiceReadyOnServer = false;
   let localStream = null;
   let audioContext = null;
   let analyserTimer = null;
@@ -99,8 +100,16 @@ document.addEventListener('DOMContentLoaded', () => {
     renderParticipants(users);
     participantCount.textContent = users.length;
 
+    const me = users.find((user) => user.id === mySocketId);
+    const wasVoiceReady = voiceReadyOnServer;
+    voiceReadyOnServer = Boolean(me?.inVoice);
+
     if (!users.some((user) => user.id === mySocketId)) {
       window.location.replace('/');
+    }
+
+    if (!voiceReadyOnServer || (voiceReadyOnServer && !wasVoiceReady)) {
+      Object.keys(peerConnections).forEach(tearDownPeer);
     }
 
     syncVoicePeers();
@@ -305,7 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function syncVoicePeers() {
-    if (!voiceEnabled) {
+    if (!voiceEnabled || !voiceReadyOnServer) {
       Object.keys(peerConnections).forEach(tearDownPeer);
       return;
     }
@@ -375,6 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function disableVoice() {
     if (!voiceEnabled) return;
     voiceEnabled = false;
+    voiceReadyOnServer = false;
     socket.emit('voice:leave');
     toggleVoiceBtn.textContent = 'Войти в голос';
     toggleVoiceBtn.disabled = !joinConfirmed;
