@@ -16,7 +16,12 @@ const MAX_MESSAGES_PER_ROOM = 200;
 const rooms = Object.create(null);
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+const publicDir = path.join(__dirname, 'public');
+app.use(express.static(publicDir));
+
+app.get('/', (_, res) => {
+  res.sendFile(path.join(publicDir, 'index.html'));
+});
 
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
