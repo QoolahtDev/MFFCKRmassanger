@@ -37,7 +37,19 @@ document.addEventListener('DOMContentLoaded', () => {
   let lastSpeaking = false;
 
   const rtcConfig = {
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:80?transport=tcp',
+          'turns:openrelay.metered.ca:443'
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+    ]
   };
 
   const escapeHtml = (value = '') =>
@@ -324,6 +336,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (audio.srcObject !== stream) {
       audio.srcObject = stream;
     }
+    audio.play().catch((error) => {
+      console.error('Не удалось воспроизвести удалённый аудио-поток', error);
+    });
   }
 
   function tearDownPeer(socketId) {
