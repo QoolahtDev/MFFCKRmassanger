@@ -1,8 +1,9 @@
+﻿"use strict";
+
 document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
   const roomCode = (params.get('room') || '').toUpperCase();
   const displayName = (params.get('name') || '').trim();
-
   if (!roomCode || !displayName) {
     window.location.replace('/');
     return;
@@ -10,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const socket = io();
   const peerConnections = {};
+  const pendingCandidates = new Map();
   const remoteAudio = new Map();
   const audioContainer = document.getElementById('audioContainer');
 
@@ -50,19 +52,19 @@ document.addEventListener('DOMContentLoaded', () => {
         username: 'openrelayproject',
         credential: 'openrelayproject'
       }
-    ]
+    ],
+    iceTransportPolicy: 'relay',
+    sdpSemantics: 'unified-plan'
   };
 
   const escapeHtml = (value = '') =>
-    value.replace(/[&<>"']/g, (char) =>
-      ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-      })[char]
-    );
+    value.replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    })[char]);
 
   const joinRoom = () => {
     socket.emit('joinRoom', { roomCode, name: displayName }, (response) => {
@@ -76,13 +78,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  socket.on('session', ({ socketId }) => {
-    mySocketId = socketId;
-  });
-
-  if (socket.connected) {
-    joinRoom();
-  }
+  socket.on('session', ({ socketId }) => { mySocketId = socketId; });
+  if (socket.connected) joinRoom();
   socket.on('connect', joinRoom);
 
   socket.on('roomHistory', (history = []) => {
@@ -90,21 +87,18 @@ document.addEventListener('DOMContentLoaded', () => {
     scrollMessages();
   });
 
-  socket.on('chatMessage', (message) => {
-    renderMessage(message);
-    scrollMessages();
-  });
+  socket.on('chatMessage', (message) => { renderMessage(message); scrollMessages(); });
 
   socket.on('roomUsers', (users = []) => {
     currentUsers = users;
     renderParticipants(users);
     participantCount.textContent = users.length;
 
-    const me = users.find((user) => user.id === mySocketId);
+    const me = users.find((u) => u.id === mySocketId);
     const wasVoiceReady = voiceReadyOnServer;
     voiceReadyOnServer = Boolean(me?.inVoice);
 
-    if (!users.some((user) => user.id === mySocketId)) {
+    if (!users.some((u) => u.id === mySocketId)) {
       window.location.replace('/');
     }
 
@@ -117,14 +111,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   socket.on('voice:activity', ({ socketId, speaking }) => {
     const row = participantList.querySelector(`[data-user-id="${socketId}"]`);
-    if (row) {
-      row.dataset.speaking = speaking ? 'true' : 'false';
-    }
+    if (row) row.dataset.speaking = speaking ? 'true' : 'false';
   });
 
-  socket.on('userLeft', ({ socketId }) => {
-    tearDownPeer(socketId);
-  });
+  socket.on('userLeft', ({ socketId }) => { tearDownPeer(socketId); });
 
   socket.on('webrtc-offer', async ({ from, sdp }) => {
     const pc = ensurePeerConnection(from, false);
@@ -134,6 +124,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('webrtc-answer', { targetId: from, sdp: pc.localDescription });
+      const queued = pendingCandidates.get(from);
+      if (queued && queued.length) {
+        for (const c of queued) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) { console.error(e); }
+        }
+        pendingCandidates.delete(from);
+      }
     } catch (error) {
       console.error('Error handling offer', error);
     }
@@ -144,19 +141,29 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!pc) return;
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      const queued = pendingCandidates.get(from);
+      if (queued && queued.length) {
+        for (const c of queued) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) { console.error(e); }
+        }
+        pendingCandidates.delete(from);
+      }
     } catch (error) {
       console.error('Error handling answer', error);
     }
   });
 
   socket.on('webrtc-ice', async ({ from, candidate }) => {
+    if (!candidate) return;
     const pc = peerConnections[from];
-    if (!pc || !candidate) return;
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (error) {
-      console.error('Error adding ICE candidate', error);
+    if (!pc || !pc.remoteDescription) {
+      const list = pendingCandidates.get(from) || [];
+      list.push(candidate);
+      pendingCandidates.set(from, list);
+      return;
     }
+    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); }
+    catch (error) { console.error('Error adding ICE candidate', error); }
   });
 
   socket.on('disconnect', () => {
@@ -169,36 +176,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const text = messageInput.value.trim();
     if (!text) return;
     socket.emit('chatMessage', { roomCode, text }, (response) => {
-      if (!response?.ok) {
-        alert('Не удалось отправить сообщение.');
-      }
+      if (!response?.ok) alert('Не удалось отправить сообщение.');
     });
     messageInput.value = '';
   });
 
   toggleVoiceBtn.addEventListener('click', () => {
-    if (voiceEnabled) {
-      disableVoice();
-    } else {
-      enableVoice();
-    }
+    if (voiceEnabled) disableVoice(); else enableVoice();
   });
 
-  leaveRoomBtn.addEventListener('click', () => {
-    disableVoice();
-    socket.emit('leaveRoom');
-    window.location.replace('/');
-  });
-
-  backToStartBtn.addEventListener('click', () => {
-    disableVoice();
-    socket.emit('leaveRoom');
-    window.location.replace('/');
-  });
-
-  window.addEventListener('beforeunload', () => {
-    socket.emit('leaveRoom');
-  });
+  leaveRoomBtn.addEventListener('click', () => { disableVoice(); socket.emit('leaveRoom'); window.location.replace('/'); });
+  backToStartBtn.addEventListener('click', () => { disableVoice(); socket.emit('leaveRoom'); window.location.replace('/'); });
+  window.addEventListener('beforeunload', () => { socket.emit('leaveRoom'); });
 
   function renderParticipants(users) {
     participantList.innerHTML = '';
@@ -223,15 +212,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderMessage(message = {}) {
     const row = document.createElement('div');
     row.className = 'message-row';
-    if (message.senderId === mySocketId) {
-      row.classList.add('is-self');
-    }
-
-    const time = new Date(message.timestamp || Date.now()).toLocaleTimeString('ru-RU', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
+    if (message.senderId === mySocketId) row.classList.add('is-self');
+    const time = new Date(message.timestamp || Date.now()).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     row.innerHTML = `
       <div class="message-meta">
         <span class="message-author">${escapeHtml(message.name || 'Без имени')}</span>
@@ -239,16 +221,11 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
       <p class="message-text">${escapeHtml(message.text || '')}</p>
     `;
-
     messageFeed.appendChild(row);
-    if (messageFeed.children.length > 500) {
-      messageFeed.removeChild(messageFeed.firstChild);
-    }
+    if (messageFeed.children.length > 500) messageFeed.removeChild(messageFeed.firstChild);
   }
 
-  function scrollMessages() {
-    messageFeed.scrollTop = messageFeed.scrollHeight;
-  }
+  function scrollMessages() { messageFeed.scrollTop = messageFeed.scrollHeight; }
 
   function shouldInitiateOffer(targetId) {
     if (!voiceEnabled || !mySocketId) return false;
@@ -260,35 +237,20 @@ document.addEventListener('DOMContentLoaded', () => {
       ensureLocalTracks(peerConnections[targetId]);
       return peerConnections[targetId];
     }
-
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnections[targetId] = pc;
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit('webrtc-ice', { targetId, candidate: event.candidate });
-      }
-    };
-
-    pc.ontrack = (event) => {
-      const [stream] = event.streams;
-      if (stream) {
-        attachRemoteAudio(targetId, stream);
-      }
-    };
-
+    pc.onicecandidate = (event) => { if (event.candidate) socket.emit('webrtc-ice', { targetId, candidate: event.candidate }); };
+    pc.ontrack = (event) => { const [stream] = event.streams; if (stream) attachRemoteAudio(targetId, stream); };
+    try { pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        tearDownPeer(targetId);
-      }
+      const s = pc.connectionState;
+      if (s === 'failed') { try { pc.restartIce(); } catch (_) {} }
+      if (s === 'failed' || s === 'closed' || s === 'disconnected') tearDownPeer(targetId);
     };
 
     ensureLocalTracks(pc);
-
-    if (maybeInitiate && shouldInitiateOffer(targetId)) {
-      makeOffer(targetId, pc);
-    }
-
+    if (maybeInitiate && shouldInitiateOffer(targetId)) makeOffer(targetId, pc);
     return pc;
   }
 
@@ -298,38 +260,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socket.emit('webrtc-offer', { targetId, sdp: pc.localDescription });
-    } catch (error) {
-      console.error('Offer error', error);
-    }
+    } catch (error) { console.error('Offer error', error); }
   }
 
   async function ensureLocalTracks(pc) {
     if (!localStream || !pc) return;
     const existingTracks = pc.getSenders().map((sender) => sender.track);
-    localStream.getTracks().forEach((track) => {
-      if (!existingTracks.includes(track)) {
-        pc.addTrack(track, localStream);
-      }
-    });
+    localStream.getTracks().forEach((track) => { if (!existingTracks.includes(track)) pc.addTrack(track, localStream); });
   }
 
   function syncVoicePeers() {
-    if (!voiceEnabled || !voiceReadyOnServer) {
-      Object.keys(peerConnections).forEach(tearDownPeer);
-      return;
-    }
-
-    const otherVoiceUsers = currentUsers
-      .filter((user) => user.inVoice && user.id !== mySocketId)
-      .map((user) => user.id);
-
+    if (!voiceEnabled || !voiceReadyOnServer) { Object.keys(peerConnections).forEach(tearDownPeer); return; }
+    const otherVoiceUsers = currentUsers.filter((u) => u.inVoice && u.id !== mySocketId).map((u) => u.id);
     otherVoiceUsers.forEach((id) => ensurePeerConnection(id, true));
-
-    Object.keys(peerConnections).forEach((id) => {
-      if (!otherVoiceUsers.includes(id)) {
-        tearDownPeer(id);
-      }
-    });
+    Object.keys(peerConnections).forEach((id) => { if (!otherVoiceUsers.includes(id)) tearDownPeer(id); });
   }
 
   function attachRemoteAudio(socketId, stream) {
@@ -342,26 +286,15 @@ document.addEventListener('DOMContentLoaded', () => {
       audioContainer.appendChild(audio);
       remoteAudio.set(socketId, audio);
     }
-    if (audio.srcObject !== stream) {
-      audio.srcObject = stream;
-    }
-    audio.play().catch((error) => {
-      console.error('Не удалось воспроизвести удалённый аудио-поток', error);
-    });
+    if (audio.srcObject !== stream) audio.srcObject = stream;
+    audio.play().catch((error) => { console.error('Не удалось воспроизвести удалённый аудио-поток', error); });
   }
 
   function tearDownPeer(socketId) {
     const pc = peerConnections[socketId];
-    if (pc) {
-      pc.close();
-      delete peerConnections[socketId];
-    }
+    if (pc) { pc.close(); delete peerConnections[socketId]; }
     const audio = remoteAudio.get(socketId);
-    if (audio) {
-      audio.srcObject = null;
-      audio.remove();
-      remoteAudio.delete(socketId);
-    }
+    if (audio) { audio.srcObject = null; audio.remove(); remoteAudio.delete(socketId); }
   }
 
   async function enableVoice() {
@@ -391,12 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
     voiceHint.textContent = 'Вы еще не подключались к голосу.';
     voiceStatus.textContent = 'Микрофон выключен';
     stopVoiceActivityDetection();
-
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-      localStream = null;
-    }
-
+    if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
     Object.keys(peerConnections).forEach(tearDownPeer);
   }
 
@@ -404,35 +332,23 @@ document.addEventListener('DOMContentLoaded', () => {
     stopVoiceActivityDetection();
     const Context = window.AudioContext || window.webkitAudioContext;
     if (!Context) return;
-
     audioContext = new Context();
     const source = audioContext.createMediaStreamSource(stream);
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 512;
     source.connect(analyser);
-
     const buffer = new Uint8Array(analyser.frequencyBinCount);
-
     analyserTimer = setInterval(() => {
       analyser.getByteFrequencyData(buffer);
-      const avg = buffer.reduce((sum, value) => sum + value, 0) / buffer.length;
+      const avg = buffer.reduce((sum, v) => sum + v, 0) / buffer.length;
       const speaking = avg > 30;
-      if (speaking !== lastSpeaking) {
-        lastSpeaking = speaking;
-        socket.emit('voice:activity', { speaking });
-      }
+      if (speaking !== lastSpeaking) { lastSpeaking = speaking; socket.emit('voice:activity', { speaking }); }
     }, 300);
   }
 
   function stopVoiceActivityDetection() {
-    if (analyserTimer) {
-      clearInterval(analyserTimer);
-      analyserTimer = null;
-    }
-    if (audioContext) {
-      audioContext.close();
-      audioContext = null;
-    }
+    if (analyserTimer) { clearInterval(analyserTimer); analyserTimer = null; }
+    if (audioContext) { audioContext.close(); audioContext = null; }
     lastSpeaking = false;
   }
 });
